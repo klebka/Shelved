@@ -3,7 +3,11 @@ export async function GET(request){
     const steamid = searchParams.get('steamid')
 
     if(!steamid){
-        return Response.json({error: 'Missing steamid parameter'}, {status: 400})
+        return Response.json({error: 'Missing Steam ID parameter'}, {status: 400})
+    }
+
+    if(steamid.length > 17){
+        return Response.json({error: 'Invalid Steam ID'}, {status: 401})
     }
 
     const apiKey = process.env.STEAM_API_KEY
