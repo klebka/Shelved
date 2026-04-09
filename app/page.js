@@ -25,8 +25,13 @@ export default function Home() {
   const [mood, setMood] = useState(null)
   const [shameMode, setShameMode] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
+  const [cooldown, setCooldown] = useState(false)
 
   async function fetchLibrary() {
+    if (cooldown) return
+    setCooldown(true)
+    setTimeout(() => setCooldown(false), 5000)
+
     setLoading(true)
     setError(null)
     setSuggestion(null)
@@ -306,16 +311,16 @@ export default function Home() {
             }}/>
           <button
             onClick={fetchLibrary}
-            disabled={!steamid || loading}
+            disabled={!steamid || loading || cooldown}
             style={{
               padding: '11px 20px',
               fontSize: '14px',
               fontWeight: '500',
-              background: steamid && !loading ? '#fff' : '#1a1825',
-              color: steamid && !loading ? '#0b0812' : '#333344',
+              background: steamid && !loading && !cooldown ? '#fff' : '#1a1825',
+              color: steamid && !loading && !cooldown ? '#0b0812' : '#333344',
               border: 'none',
               borderRadius: '10px',
-              cursor: steamid && !loading ? 'pointer' : 'not-allowed',
+              cursor: steamid && !loading && !cooldown ? 'pointer' : 'not-allowed',
               transition: 'all 0.2s ease',
               display: 'flex',
               alignItems: 'center',
@@ -332,7 +337,7 @@ export default function Home() {
                 }}/>
                 Loading
               </>
-            ) : 'Search'}
+            ) : cooldown? 'Wait...' : 'Search'}
           </button>
         </div>
 
