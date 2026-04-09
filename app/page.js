@@ -360,12 +360,42 @@ export default function Home() {
 
         {/* Loading skeleton */}
         {loading && (
-          <div style={{ marginTop: '28px', borderRadius: '14px', overflow: 'hidden', background: '#12101a', border: '1px solid #1a1825' }}>
-            <div className="shimmer" style={{ width: '100%', aspectRatio: '460/215', background: '#1a1825' }} />
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div className="shimmer" style={{ height: '20px', width: '60%', background: '#1a1825', borderRadius: '6px' }} />
-              <div className="shimmer" style={{ height: '14px', width: '30%', background: '#1a1825', borderRadius: '6px' }} />
-              <div className="shimmer" style={{ height: '40px', width: '100%', background: '#1a1825', borderRadius: '8px', marginTop: '6px' }} />
+          <div style={{ 
+            marginTop: '28px', 
+            borderRadius: '14px', 
+            overflow: 'hidden', 
+            background: '#12101a', 
+            border: '1px solid #1a1825' 
+          }}>
+            <div className="shimmer" style={{ 
+              width: '100%', 
+              aspectRatio: '460/215', 
+              background: '#1a1825' 
+            }}/>
+            <div style={{ 
+              padding: '20px', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '10px' 
+            }}>
+              <div className="shimmer" style={{ 
+                height: '20px', width: '60%', 
+                background: '#1a1825', 
+                borderRadius: '6px' 
+              }}/>
+              <div className="shimmer" style={{ 
+                height: '14px', 
+                width: '30%', 
+                background: '#1a1825', 
+                borderRadius: '6px' 
+              }}/>
+              <div className="shimmer" style={{ 
+                height: '40px', 
+                width: '100%', 
+                background: '#1a1825', 
+                borderRadius: '8px', 
+                marginTop: '6px' 
+              }}/>
             </div>
           </div>
         )}
@@ -385,7 +415,12 @@ export default function Home() {
               transition: 'opacity 0.2s ease',
             }}>
             {/* Cover image */}
-            <div style={{ position: 'relative', width: '100%', paddingTop: '46.7%', background: '#1a1825' }}>
+            <div style={{ 
+              position: 'relative', 
+              width: '100%', 
+              paddingTop: '46.7%', 
+              background: '#1a1825' 
+            }}>
               {!imageLoaded && (
                 <div className="shimmer" style={{
                   position: 'absolute', inset: 0,
