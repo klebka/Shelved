@@ -122,15 +122,15 @@ export default function Home() {
     fontSize: '13px',
     fontWeight: active ? '500' : '400',
     border: shame
-      ? `1px solid ${active ? '#ff4444' : '#663333'}`
-      : `1px solid ${active ? '#ffffff' : '#2e2e3a'}`,
+      ? `1px solid ${active ? '#ff4444' : '#2e2e3a'}`
+      : `1px solid ${active ? '#d4d4cc' : '#2e2e3a'}`,
     cursor: 'pointer',
     background: shame
       ? (active ? '#ff444422' : 'transparent')
       : (active ? '#ffffff18' : 'transparent'),
     color: shame
-      ? (active ? '#ff8888' : '#885555')
-      : (active ? '#ffffff' : '#666680'),
+      ? (active ? '#c40000' : '#3c3a3d')
+      : (active ? '#ffffff' : '#3c3a3d'),
     transition: 'all 0.15s ease',
     whiteSpace: 'nowrap',
   })
@@ -139,8 +139,8 @@ export default function Home() {
     <>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { background: #0b0812; }
-        input::placeholder { color: #444455; }
+        html, body { background: #000000; }
+        input::placeholder { color: #7b7b7f; }
         input:focus { outline: none; border-color: #444466 !important; }
         button:active { transform: scale(0.97); }
         @keyframes fadeUp {
@@ -165,12 +165,13 @@ export default function Home() {
       `}</style>
 
       <main className="main-pad" style={{
-        maxWidth: '460px',
+        minWidth: '400px',
+        maxWidth: '400px',
         margin: '0 auto',
         padding: '60px 1.5rem 100px',
         minHeight: '100vh',
-        background: '#0b0812',
-        color: '#fff',
+        background: '#a69c7d',
+        color: '#ffffff',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       }}>
 
@@ -188,11 +189,11 @@ export default function Home() {
             Shelved
           </h1>
           <p style={{ 
-            color: '#555566', 
+            color: '#3e3e51', 
             fontSize: '15px', 
             lineHeight: 1.5 
           }}>
-            Too many games, not enough time.
+            <i>Too many games, not enough time.</i>
           </p>
         </div>
 
@@ -204,6 +205,7 @@ export default function Home() {
           gap: '16px' 
         }}>
 
+          {/* Time available */}
           <div>
             <p style={{ 
               fontSize: '10px', 
@@ -212,7 +214,7 @@ export default function Home() {
               textTransform: 'uppercase', 
               marginBottom: '10px' 
             }}>
-              Time available
+              <b>Time Available</b>
             </p>
             <div className="filters-row" style={{ 
               display: 'flex', 
@@ -226,7 +228,8 @@ export default function Home() {
               ))}
             </div>
           </div>
-
+          
+          {/* Mood */}
           <div>
             <p style={{ 
               fontSize: '10px', 
@@ -235,7 +238,7 @@ export default function Home() {
               textTransform: 'uppercase', 
               marginBottom: '10px' 
             }}>
-              Mood
+              <b>Mood</b>
             </p>
             <div className="filters-row" style={{ 
               display: 'flex', 
@@ -250,6 +253,7 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Shame */}
           <div>
             <p style={{ 
               fontSize: '10px', 
@@ -258,7 +262,7 @@ export default function Home() {
               textTransform: 'uppercase', 
               marginBottom: '10px' 
             }}>
-              Backlog guilt
+              <b>Backlog Guilt</b>
             </p>
             <div style={{ 
               display: 'flex', 
@@ -273,7 +277,7 @@ export default function Home() {
                   fontSize: '12px', 
                   color: '#885555' 
                 }}>
-                  Surfacing your most neglected games
+                  <b>Surfacing your most neglected</b>
                 </span>
               )}
             </div>
@@ -317,7 +321,7 @@ export default function Home() {
               fontSize: '14px',
               fontWeight: '500',
               background: steamid && !loading && !cooldown ? '#fff' : '#1a1825',
-              color: steamid && !loading && !cooldown ? '#0b0812' : '#333344',
+              color: steamid && !loading && !cooldown ? '#0b0812' : '#6f6f6f',
               border: 'none',
               borderRadius: '10px',
               cursor: steamid && !loading && !cooldown ? 'pointer' : 'not-allowed',
@@ -344,7 +348,8 @@ export default function Home() {
         {/* Helper text */}
         {!games && !loading && (
           <p style={{ fontSize: '12px', color: '#333344', marginBottom: '24px' }}>
-            Find your Steam ID at steamidfinder.com
+            Find your Steam ID at steamidfinder.com<br/>
+            example: 76561198274160349
           </p>
         )}
 
@@ -413,6 +418,8 @@ export default function Home() {
             style={{
               marginTop: '28px',
               borderRadius: '14px',
+              minWidth: '400px',
+              maxWidth: '400px',
               overflow: 'hidden',
               background: '#fffffff6',
               border: '1px solid #ffffff',
@@ -455,7 +462,7 @@ export default function Home() {
               <h2 style={{ 
                 fontSize: '20px', 
                 color: '#000000',
-                fontWeight: '600', 
+                fontWeight: '600',
                 marginBottom: '6px', 
                 lineHeight: 1.2 
                 }}>
@@ -525,11 +532,10 @@ export default function Home() {
 
         {/* Footer */}
         <p style={{ 
-          marginTop: '60px', 
           fontSize: '12px', 
           color: '#1e1c2a', 
           textAlign: 'center' 
-        }}>
+        }} className='fixed bottom-0 left-0 w-full text-center'>
           — klebka —
         </p>
       </main>

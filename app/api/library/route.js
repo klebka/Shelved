@@ -7,7 +7,7 @@ function isRateLimited(ip) {
 
   const entry = rateLimit.get(ip) || { count: 0, start: now }
 
-  if (now - entry.start > windowMs) {
+  if(now - entry.start > windowMs) {
     rateLimit.set(ip, { count: 1, start: now })
     return false
   }
@@ -21,7 +21,7 @@ function isRateLimited(ip) {
 export async function GET(request) {
   const ip = request.headers.get('x-forwarded-for') || 'unknown'
 
-  if (isRateLimited(ip)) {
+  if(isRateLimited(ip)) {
     return Response.json(
       { error: 'Too many requests. Please wait a moment.' },
       { status: 429 }
@@ -31,10 +31,20 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url)
   const steamid = searchParams.get('steamid')
 
-  if (!steamid) {
+  if(!steamid) {
     return Response.json(
         { error: 'Missing steamid parameter' }, 
         { status: 400 })
+  }
+  else if(steamid.length != 17){
+    return Response.json(
+        { error: 'Invalid steamid' }, 
+        { status: 422 })
+  }
+  else if(steamid == /^[0-9\b]+$/){
+    return Response.json(
+        { error: 'steamid only contains numbers' }, 
+        { status: 422 })
   }
 
   const apiKey = process.env.STEAM_API_KEY
@@ -44,7 +54,7 @@ export async function GET(request) {
     const res = await fetch(url)
     const data = await res.json()
 
-    if (!data.response || !data.response.games) {
+    if(!data.response || !data.response.games) {
       return Response.json(
         { error: 'No games found. Profile may be private.' },
         { status: 404 }
