@@ -165,8 +165,8 @@ export default function Home() {
       `}</style>
 
       <main className="main-pad" style={{
-        minWidth: '400px',
-        maxWidth: '400px',
+        minWidth: '450px',
+        maxWidth: '450px',
         margin: '0 auto',
         padding: '60px 1.5rem 100px',
         minHeight: '100vh',
