@@ -1,48 +1,128 @@
 'use client'
-import { useState } from 'react'
-
-const SESSION_FILTERS = [
-  { label: '30 min', max: 120 },
-  { label: '2 hours', max: 480 },
-  { label: 'All evening', max: Infinity },
-]
-
-const MOOD_FILTERS = [
-  { label: 'Chill', tags: ['casual', 'relaxing', 'puzzle', 'exploration', 'walking simulator'] },
-  { label: 'Intense', tags: ['action', 'shooter', 'fps', 'fast-paced', 'difficult', 'souls-like'] },
-  { label: 'Story', tags: ['story rich', 'rpg', 'adventure', 'narrative', 'visual novel', 'choices matter'] },
-  { label: 'Quick', tags: ['arcade', 'roguelite', 'indie', 'short', 'casual'] },
-]
+import { useState, useEffect } from 'react'
+import Header from '@/components/Header'
+import FilterSection from '@/components/FilterSection'
+import SearchBox from '@/components/SearchBox'
+import GameCard from '@/components/GameCard'
+import SkeletonCard from '@/components/SkeletonCard'
+import PrivateProfileNotice from '@/components/PrivateProfileNotice'
+import LibraryGrid from '@/components/LibraryGrid'
+import BacklogStats from '@/components/BacklogStats'
+import Footer from '@/components/Footer'
+import { filterGames, pickRandomGame, filterMutuallyOwnedGames } from '@/lib/filters'
+import { isValidSteamId, saveSteamId } from '@/lib/steam'
 
 export default function Home() {
+  const [viewMode, setViewMode] = useState('picker')
+  const [soundMuted, setSoundMuted] = useState(false)
   const [steamid, setSteamid] = useState('')
+  const [friendSteamIds, setFriendSteamIds] = useState([])
   const [games, setGames] = useState(null)
   const [suggestion, setSuggestion] = useState(null)
   const [loading, setLoading] = useState(false)
   const [picking, setPicking] = useState(false)
   const [error, setError] = useState(null)
-  const [session, setSession] = useState(null)
+  const [resetNotice, setResetNotice] = useState(null)
+  const [isPrivateProfile, setIsPrivateProfile] = useState(false)
+  const [minHours, setMinHours] = useState(0)
+  const [maxHours, setMaxHours] = useState(12)
   const [mood, setMood] = useState(null)
-  const [shameMode, setShameMode] = useState(false)
-  const [imageLoaded, setImageLoaded] = useState(false)
-  const [cooldown, setCooldown] = useState(false)
+  const [exclusions, setExclusions] = useState([])
+  const [unplayedWeight, setUnplayedWeight] = useState(30)
+  const [skippedAppIds, setSkippedAppIds] = useState([])
+
+  // SSO Callback Listener
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const ssoSteamId = params.get('steamid')
+    const ssoError = params.get('error')
+
+    if (ssoError === 'steam_auth_failed') {
+      setError('Steam authentication failed or was cancelled. Please try again.')
+    } else if (ssoSteamId && isValidSteamId(ssoSteamId)) {
+      setSteamid(ssoSteamId)
+      saveSteamId(ssoSteamId)
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+  }, [])
+
+  // Keyboard Shortcuts (Space/R: pick again, S: skip, Esc: reset filters)
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (['input', 'textarea', 'select'].includes(e.target.tagName.toLowerCase())) return
+      if (!games || loading || picking) return
+
+      if (e.code === 'Space' || e.key.toLowerCase() === 'r') {
+        e.preventDefault()
+        pickNextGame()
+      } else if (e.key.toLowerCase() === 's' && suggestion) {
+        e.preventDefault()
+        handleSkip(suggestion.appid)
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        handleResetFilters()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [games, loading, picking, suggestion, minHours, maxHours, mood, exclusions, unplayedWeight, skippedAppIds])
 
   async function fetchLibrary() {
-    if (cooldown) return
-    setCooldown(true)
-    setTimeout(() => setCooldown(false), 5000)
+    if (loading || !steamid.trim()) return
+    if (!isValidSteamId(steamid)) {
+      setError('Please enter a valid 17-digit Steam ID.')
+      setIsPrivateProfile(false)
+      return
+    }
 
     setLoading(true)
     setError(null)
+    setResetNotice(null)
+    setIsPrivateProfile(false)
     setSuggestion(null)
     setGames(null)
-    setImageLoaded(false)
+    setSkippedAppIds([])
+
     try {
-      const res = await fetch(`/api/library?steamid=${steamid.trim()}`)
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      setGames(data)
-      pickGame(data, session, mood, shameMode)
+      const res1 = await fetch(`/api/library?steamid=${steamid.trim()}`)
+      const data1 = await res1.json()
+      if (!res1.ok) {
+        if (res1.status === 404 || (data1.error && data1.error.toLowerCase().includes('private'))) {
+          setIsPrivateProfile(true)
+        }
+        throw new Error(data1.error || 'Failed to fetch games')
+      }
+
+      let combinedGames = data1
+
+      // Fetch multiple friend libraries in parallel safely with fallback
+      const validFriendIds = friendSteamIds
+        .map(id => id.trim())
+        .filter(id => isValidSteamId(id))
+
+      if (validFriendIds.length > 0) {
+        const friendFetches = validFriendIds.map(id =>
+          fetch(`/api/library?steamid=${id}`)
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
+        )
+        const friendResults = await Promise.all(friendFetches)
+        const validFriendLibs = friendResults.filter(res => Array.isArray(res))
+
+        if (validFriendLibs.length > 0) {
+          combinedGames = filterMutuallyOwnedGames([data1, ...validFriendLibs])
+          if (combinedGames.length === 0) {
+            setError(`No mutually owned games found across these ${validFriendIds.length + 1} players. Make sure everyone has public game details set on Steam.`)
+            setGames([])
+            return
+          }
+        }
+      }
+
+      setGames(combinedGames)
+      pickNextGame(combinedGames, minHours, maxHours, mood, [], exclusions, unplayedWeight, null)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -50,495 +130,187 @@ export default function Home() {
     }
   }
 
-  function filterGames(library, sessionFilter, moodFilter, shame) {
-    let filtered = [...library]
-    if (shame) {
-      return filtered
-        .filter(g => g.playtime_forever === 0)
-        .sort((a, b) => a.appid - b.appid)
-    }
-    if (sessionFilter) {
-      filtered = filtered.filter(g => {
-        if (g.playtime_forever === 0) return true
-        const sessions = g.rtime_last_played ? 3 : 1
-        return (g.playtime_forever / sessions) <= sessionFilter.max
-      })
-    }
-    if (moodFilter) {
-      const moodTagged = filtered.filter(g =>
-        moodFilter.tags.some(tag => (g.name || '').toLowerCase().includes(tag))
-      )
-      if (moodTagged.length >= 3) filtered = moodTagged
-    }
-    return filtered
-  }
-
-  function pickGame(library = games, sessionFilter = session, moodFilter = mood, shame = shameMode) {
+  function pickNextGame(
+    library = games,
+    minH = minHours,
+    maxH = maxHours,
+    moodFilter = mood,
+    skipped = skippedAppIds,
+    activeExclusions = exclusions,
+    weight = unplayedWeight,
+    currentId = suggestion?.appid
+  ) {
     if (!library || library.length === 0) return
-    const filtered = filterGames(library, sessionFilter, moodFilter, shame)
-    if (filtered.length === 0) {
-      setError('No games match your filters. Try adjusting them.')
+
+    let candidatePool = filterGames(library, minH, maxH, moodFilter, activeExclusions)
+
+    if (candidatePool.length === 0) {
+      setError('No games match your active filters. Try adjusting them.')
+      setPicking(false)
+      setSuggestion(null)
       return
     }
+
     setError(null)
     setPicking(true)
-    setImageLoaded(false)
     setTimeout(() => {
-      const next = shame
-        ? filtered[0]
-        : filtered[Math.floor(Math.random() * filtered.length)]
+      const { game: next, poolReset } = pickRandomGame(candidatePool, skipped, weight, currentId)
       setSuggestion(next)
       setPicking(false)
-    }, 300)
+
+      if (poolReset) {
+        setSkippedAppIds([])
+        setResetNotice("You've explored all matching games in your library! Skipped list has been reset.")
+        setTimeout(() => setResetNotice(null), 4500)
+      }
+    }, 600)
   }
 
-  function handleSessionToggle(f) {
-    const next = session?.label === f.label ? null : f
-    setSession(next)
-    if (games) pickGame(games, next, mood, shameMode)
+  function handleSkip(appid) {
+    const updatedSkipped = [...skippedAppIds, appid]
+    setSkippedAppIds(updatedSkipped)
+    pickNextGame(games, minHours, maxHours, mood, updatedSkipped, exclusions, unplayedWeight, appid)
+  }
+
+  function handleMinHoursChange(val) {
+    setMinHours(val)
+    if (games) pickNextGame(games, val, maxHours, mood, skippedAppIds, exclusions, unplayedWeight, suggestion?.appid)
+  }
+
+  function handleMaxHoursChange(val) {
+    setMaxHours(val)
+    if (games) pickNextGame(games, minHours, val, mood, skippedAppIds, exclusions, unplayedWeight, suggestion?.appid)
   }
 
   function handleMoodToggle(f) {
-    const next = mood?.label === f.label ? null : f
+    const next = mood?.id === f.id ? null : f
     setMood(next)
-    if (games) pickGame(games, session, next, shameMode)
+    if (games) pickNextGame(games, minHours, maxHours, next, skippedAppIds, exclusions, unplayedWeight, suggestion?.appid)
   }
 
-  function handleShameToggle() {
-    const next = !shameMode
-    setShameMode(next)
-    if (games) pickGame(games, session, mood, next)
+  function handleExclusionToggle(exId) {
+    const updated = exclusions.includes(exId)
+      ? exclusions.filter(id => id !== exId)
+      : [...exclusions, exId]
+    setExclusions(updated)
+    if (games) pickNextGame(games, minHours, maxHours, mood, skippedAppIds, updated, unplayedWeight, suggestion?.appid)
   }
 
-  function getPlaytime(minutes) {
-    if (minutes === 0) return 'Never played'
-    if (minutes < 60) return `${minutes}m played`
-    return `${(minutes / 60).toFixed(1)}h played`
+  function handleWeightChange(newWeight) {
+    setUnplayedWeight(newWeight)
+    if (games) pickNextGame(games, minHours, maxHours, mood, skippedAppIds, exclusions, newWeight, suggestion?.appid)
   }
 
-  const pill = (active, shame = false) => ({
-    padding: '7px 16px',
-    borderRadius: '999px',
-    fontSize: '13px',
-    fontWeight: active ? '500' : '400',
-    border: shame
-      ? `1px solid ${active ? '#ff4444' : '#2e2e3a'}`
-      : `1px solid ${active ? '#d4d4cc' : '#2e2e3a'}`,
-    cursor: 'pointer',
-    background: shame
-      ? (active ? '#ff444422' : 'transparent')
-      : (active ? '#ffffff18' : 'transparent'),
-    color: shame
-      ? (active ? '#c40000' : '#3c3a3d')
-      : (active ? '#ffffff' : '#3c3a3d'),
-    transition: 'all 0.15s ease',
-    whiteSpace: 'nowrap',
-  })
+  function handleResetFilters() {
+    setMinHours(0)
+    setMaxHours(12)
+    setMood(null)
+    setExclusions([])
+    setUnplayedWeight(30)
+    setSkippedAppIds([])
+    setResetNotice(null)
+    if (games) pickNextGame(games, 0, 12, null, [], [], 30, null)
+  }
+
+  let activeFilteredGames = games ? filterGames(games, minHours, maxHours, mood, exclusions) : []
+
+  const activeFriendCount = friendSteamIds.filter(id => isValidSteamId(id)).length
 
   return (
-    <>
-      <style>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { background: #000000; }
-        input::placeholder { color: #7b7b7f; }
-        input:focus { outline: none; border-color: #444466 !important; }
-        button:active { transform: scale(0.97); }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes shimmer {
-          0%   { opacity: 0.4; }
-          50%  { opacity: 0.7; }
-          100% { opacity: 0.4; }
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        .card-enter { animation: fadeUp 0.35s ease forwards; }
-        .shimmer    { animation: shimmer 1.4s ease-in-out infinite; }
-        .spinner    { animation: spin 0.8s linear infinite; }
-        @media (max-width: 480px) {
-          .filters-row { gap: 6px !important; }
-          .main-pad    { padding: 40px 1rem 80px !important; }
-        }
-      `}</style>
+    <main className="main-container">
+      <Header
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        soundMuted={soundMuted}
+        setSoundMuted={setSoundMuted}
+      />
 
-      <main className="main-pad" style={{
-        minWidth: '450px',
-        maxWidth: '450px',
-        margin: '0 auto',
-        padding: '60px 1.5rem 100px',
-        minHeight: '100vh',
-        background: '#a69c7d',
-        color: '#ffffff',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}>
+      <div className="app-body-layout">
+        <aside className="sidebar-column">
+          {games && games.length > 0 && !loading && <BacklogStats games={games} />}
 
-        {/* Header */}
-        <div style={{ 
-          marginBottom: '36px' 
-        }}>
-          <h1 style={{ 
-            fontSize: '48px', 
-            fontWeight: '700', 
-            letterSpacing: '-2px', 
-            lineHeight: 1, 
-            marginBottom: '8px' 
-          }}>
-            Shelved
-          </h1>
-          <p style={{ 
-            color: '#3e3e51', 
-            fontSize: '15px', 
-            lineHeight: 1.5 
-          }}>
-            <i>Too many games, not enough time.</i>
-          </p>
-        </div>
+          <FilterSection
+            games={games}
+            minHours={minHours}
+            maxHours={maxHours}
+            mood={mood}
+            exclusions={exclusions}
+            unplayedWeight={unplayedWeight}
+            onMinHoursChange={handleMinHoursChange}
+            onMaxHoursChange={handleMaxHoursChange}
+            onMoodToggle={handleMoodToggle}
+            onExclusionToggle={handleExclusionToggle}
+            onWeightChange={handleWeightChange}
+            onResetFilters={handleResetFilters}
+          />
+        </aside>
 
-        {/* Filter section */}
-        <div style={{ 
-          marginBottom: '28px', 
-          display: 'flex', 
-          flexDirection: 'column', 
-          gap: '16px' 
-        }}>
+        <section className="main-hero-column">
+          <SearchBox
+            steamid={steamid}
+            setSteamid={setSteamid}
+            friendSteamIds={friendSteamIds}
+            setFriendSteamIds={setFriendSteamIds}
+            onSearch={fetchLibrary}
+            loading={loading}
+          />
 
-          {/* Time available */}
-          <div>
-            <p style={{ 
-              fontSize: '10px', 
-              color: '#444455', 
-              letterSpacing: '0.1em', 
-              textTransform: 'uppercase', 
-              marginBottom: '10px' 
-            }}>
-              <b>Time Available</b>
+          {!games && !loading && !isPrivateProfile && (
+            <p className="helper-text">
+              Sign in via Steam above or enter a 17-digit Steam ID. Compare with multiple friends by adding their Steam IDs above.
             </p>
-            <div className="filters-row" style={{ 
-              display: 'flex', 
-              gap: '8px', 
-              flexWrap: 'wrap' 
-            }}>
-              {SESSION_FILTERS.map(f => (
-                <button key={f.label} onClick={() => handleSessionToggle(f)} style={pill(session?.label === f.label)}>
-                  {f.label}
-                </button>
-              ))}
+          )}
+
+          {isPrivateProfile ? (
+            <PrivateProfileNotice onRetry={fetchLibrary} />
+          ) : (
+            error && <div className="error-banner">{error}</div>
+          )}
+
+          {resetNotice && (
+            <div className="reset-notice-banner card-enter">
+              <svg className="reset-info-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+              </svg>
+              <span>{resetNotice}</span>
             </div>
-          </div>
-          
-          {/* Mood */}
-          <div>
-            <p style={{ 
-              fontSize: '10px', 
-              color: '#444455', 
-              letterSpacing: '0.1em', 
-              textTransform: 'uppercase', 
-              marginBottom: '10px' 
-            }}>
-              <b>Mood</b>
-            </p>
-            <div className="filters-row" style={{ 
-              display: 'flex', 
-              gap: '8px', 
-              flexWrap: 'wrap' 
-            }}>
-              {MOOD_FILTERS.map(f => (
-                <button key={f.label} onClick={() => handleMoodToggle(f)} style={pill(mood?.label === f.label)}>
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          )}
 
-          {/* Shame */}
-          <div>
-            <p style={{ 
-              fontSize: '10px', 
-              color: '#444455', 
-              letterSpacing: '0.1em', 
-              textTransform: 'uppercase', 
-              marginBottom: '10px' 
-            }}>
-              <b>Backlog Guilt</b>
-            </p>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '12px' 
-            }}>
-              <button onClick={handleShameToggle} style={pill(shameMode, true)}>
-                {shameMode ? 'Shame mode ON' : 'Shame mode'}
-              </button>
-              {shameMode && (
-                <span style={{ 
-                  fontSize: '12px', 
-                  color: '#885555' 
-                }}>
-                  <b>Surfacing your most neglected</b>
-                </span>
+          {loading && <SkeletonCard />}
+
+          {games && !loading && games.length > 0 && (
+            <>
+              {activeFriendCount > 0 && (
+                <div className="friend-compare-badge">
+                  Comparing mutual games across {activeFriendCount + 1} players ({games.length} shared games)
+                </div>
               )}
-            </div>
-          </div>
-        </div>
 
-        {/* Divider */}
-        <div style={{ 
-          height: '1px', 
-          background: '#1a1825', 
-          marginBottom: '24px' 
-        }}/>
-
-        {/* Search input */}
-        <div style={{ 
-          display: 'flex', 
-          gap: '8px', 
-          marginBottom: '8px' 
-        }}>
-          <input
-            type="text"
-            placeholder="Enter your Steam ID..."
-            value={steamid}
-            onChange={e => setSteamid(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && steamid && !loading && fetchLibrary()}
-            style={{
-              flex: 1,
-              padding: '11px 16px',
-              fontSize: '14px',
-              border: '1px solid #1e1e2a',
-              borderRadius: '10px',
-              background: '#12101a',
-              color: '#fff',
-              transition: 'border-color 0.15s',
-            }}/>
-          <button
-            onClick={fetchLibrary}
-            disabled={!steamid || loading || cooldown}
-            style={{
-              padding: '11px 20px',
-              fontSize: '14px',
-              fontWeight: '500',
-              background: steamid && !loading && !cooldown ? '#fff' : '#1a1825',
-              color: steamid && !loading && !cooldown ? '#0b0812' : '#6f6f6f',
-              border: 'none',
-              borderRadius: '10px',
-              cursor: steamid && !loading && !cooldown ? 'pointer' : 'not-allowed',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              whiteSpace: 'nowrap',
-            }}>
-            {loading ? (
-              <>
-                <div className="spinner" style={{
-                  width: '14px', height: '14px',
-                  border: '2px solid #333344',
-                  borderTopColor: '#666677',
-                  borderRadius: '50%',
-                }}/>
-                Loading
-              </>
-            ) : cooldown? 'Wait...' : 'Search'}
-          </button>
-        </div>
-
-        {/* Helper text */}
-        {!games && !loading && (
-          <p style={{ fontSize: '12px', color: '#333344', marginBottom: '24px' }}>
-            Find your Steam ID at steamidfinder.com<br/>
-            example: 76561198274160349
-          </p>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div style={{
-            marginTop: '16px',
-            padding: '12px 16px',
-            background: '#1a0f0f',
-            border: '1px solid #331111',
-            borderRadius: '10px',
-            fontSize: '13px',
-            color: '#ff6666',
-          }}>
-            {error}
-          </div>
-        )}
-
-        {/* Loading skeleton */}
-        {loading && (
-          <div style={{ 
-            marginTop: '28px', 
-            borderRadius: '14px', 
-            overflow: 'hidden', 
-            background: '#12101a', 
-            border: '1px solid #1a1825' 
-          }}>
-            <div className="shimmer" style={{ 
-              width: '100%', 
-              aspectRatio: '460/215', 
-              background: '#1a1825' 
-            }}/>
-            <div style={{ 
-              padding: '20px', 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: '10px' 
-            }}>
-              <div className="shimmer" style={{ 
-                height: '20px', width: '60%', 
-                background: '#1a1825', 
-                borderRadius: '6px' 
-              }}/>
-              <div className="shimmer" style={{ 
-                height: '14px', 
-                width: '30%', 
-                background: '#1a1825', 
-                borderRadius: '6px' 
-              }}/>
-              <div className="shimmer" style={{ 
-                height: '40px', 
-                width: '100%', 
-                background: '#1a1825', 
-                borderRadius: '8px', 
-                marginTop: '6px' 
-              }}/>
-            </div>
-          </div>
-        )}
-
-        {/* Game card */}
-        {suggestion && !loading && (
-          <div
-            key={suggestion.appid}
-            className="card-enter"
-            style={{
-              marginTop: '28px',
-              borderRadius: '14px',
-              minWidth: '400px',
-              maxWidth: '400px',
-              overflow: 'hidden',
-              background: '#fffffff6',
-              border: '1px solid #ffffff',
-              opacity: picking ? 0 : 1,
-              transition: 'opacity 0.2s ease',
-            }}>
-            {/* Cover image */}
-            <div style={{ 
-              position: 'relative', 
-              width: '100%', 
-              paddingTop: '46.7%', 
-              background: '#1a1825' 
-            }}>
-              {!imageLoaded && (
-                <div className="shimmer" style={{
-                  position: 'absolute', inset: 0,
-                  background: '#1a1825',
-                }}/>
+              {viewMode === 'picker' ? (
+                <GameCard
+                  suggestion={suggestion}
+                  picking={picking}
+                  onPickAgain={() => pickNextGame()}
+                  onSkip={handleSkip}
+                  skippedCount={skippedAppIds.length}
+                  candidateGames={activeFilteredGames}
+                  soundMuted={soundMuted}
+                />
+              ) : (
+                <LibraryGrid
+                  games={activeFilteredGames}
+                />
               )}
-              <img
-                src={`https://cdn.cloudflare.steamstatic.com/steam/apps/${suggestion.appid}/header.jpg`}
-                alt={suggestion.name}
-                onLoad={() => setImageLoaded(true)}
-                onError={e => { e.target.style.display = 'none'; setImageLoaded(true) }}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  display: 'block',
-                  objectFit: 'cover',
-                  opacity: imageLoaded ? 1 : 0,
-                  transition: 'opacity 0.3s ease',
-                }}/>
-            </div>
 
-            {/* Card body */}
-            <div style={{ padding: '10px' }}>
-              <h2 style={{ 
-                fontSize: '20px', 
-                color: '#000000',
-                fontWeight: '600',
-                marginBottom: '6px', 
-                lineHeight: 1.2 
-                }}>
-                {suggestion.name}
-              </h2>
+              <p className="library-count">
+                {games.length} games in library ({activeFilteredGames.length} matching filters)
+              </p>
+            </>
+          )}
+        </section>
+      </div>
 
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px', 
-                marginBottom: '20px' 
-              }}>
-                <span style={{
-                  fontSize: '12px',
-                  color: suggestion.playtime_forever === 0 ? '#ff8888' : '#666680',
-                  background: suggestion.playtime_forever === 0 ? '#ff222211' : '#00000008',
-                  padding: '3px 10px',
-                  borderRadius: '999px',
-                  border: `1px solid ${suggestion.playtime_forever === 0 ? '#ff222233' : '#00000011'}`,
-                }}>
-                  {getPlaytime(suggestion.playtime_forever)}
-                </span>
-                {suggestion.playtime_forever === 0 && (
-                  <span style={{ 
-                    fontSize: '12px', 
-                    color: '#664444' 
-                  }}>
-                    time to fix that
-                  </span>
-                )}
-              </div>
-
-              <button
-                onClick={() => pickGame()}
-                style={{
-                  width: '100%',
-                  padding: '1px',
-                  fontSize: '14px',
-                  fontWeight: '400',
-                  background: 'transparent',
-                  color: '#666680',
-                  border: '1px solid #1e1a2e',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={e => { e.target.style.borderColor = '#2e2a4e'; e.target.style.color = '#9999bb' }}
-                onMouseLeave={e => { e.target.style.borderColor = '#1e1a2e'; e.target.style.color = '#666680' }}
-              >
-                Pick again
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Library count */}
-        {games && !loading && (
-          <p style={{ 
-            marginTop: '14px', 
-            fontSize: '12px', 
-            color: '#2a2838', 
-            textAlign: 'center' 
-          }}>
-            {games.length} games in library
-          </p>
-        )}
-
-        {/* Footer */}
-        <p style={{ 
-          fontSize: '12px', 
-          color: '#1e1c2a', 
-          textAlign: 'center' 
-        }} className='fixed bottom-0 left-0 w-full text-center'>
-          — klebka —
-        </p>
-      </main>
-    </>
+      <Footer />
+    </main>
   )
 }

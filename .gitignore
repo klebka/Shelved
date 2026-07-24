@@ -39,3 +39,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Added by code-review-graph
+.code-review-graph/
+
+# IDE & AI agent tooling
+.claude/
+.cursor/
+.gemini/
+.kiro/
+.qoder/
+.vscode/
+.mcp.json
+.opencode.json
+.cursorrules
+.windsurfrules
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+QODER.md
+
