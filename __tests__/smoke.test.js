@@ -1,10 +1,15 @@
-import { describe, it, expect } from 'vitest'
-import { GET as libraryApiHandler } from '../app/api/library/route.js'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { GET as libraryApiHandler, clearRateLimitMap } from '../app/api/library/route.js'
+import { GET as visitorsApiHandler } from '../app/api/visitors/route.js'
 import manifest from '../app/manifest.js'
 import { isValidSteamId } from '../lib/steam.js'
 import { filterGames, pickRandomGame } from '../lib/filters.js'
 
 describe('Smoke Tests - Core Application Integrity', () => {
+  beforeEach(() => {
+    clearRateLimitMap()
+  })
+
   describe('PWA Manifest Endpoint', () => {
     it('returns a valid PWA web manifest with required properties', () => {
       const pwaManifest = manifest()
@@ -17,7 +22,26 @@ describe('Smoke Tests - Core Application Integrity', () => {
     })
   })
 
-  describe('Steam Library API Route Handler', () => {
+  describe('Visitor Counter API Route Handler', () => {
+    it('returns incrementing visitor count and respects readOnly parameter', async () => {
+      const req1 = new Request('http://localhost:3000/api/visitors')
+      const res1 = await visitorsApiHandler(req1)
+      expect(res1.status).toBe(200)
+      const data1 = await res1.json()
+
+      const req2 = new Request('http://localhost:3000/api/visitors')
+      const res2 = await visitorsApiHandler(req2)
+      const data2 = await res2.json()
+      expect(data2.count).toBe(data1.count + 1)
+
+      const reqReadOnly = new Request('http://localhost:3000/api/visitors?readOnly=true')
+      const resReadOnly = await visitorsApiHandler(reqReadOnly)
+      const dataReadOnly = await resReadOnly.json()
+      expect(dataReadOnly.count).toBe(data2.count)
+    })
+  })
+
+  describe('Steam Library API Route Handler & Rate Limiting', () => {
     it('returns 400 Bad Request error response when steamid parameter is missing', async () => {
       const request = new Request('http://localhost:3000/api/library')
       const response = await libraryApiHandler(request)
@@ -32,6 +56,25 @@ describe('Smoke Tests - Core Application Integrity', () => {
       expect(response.status).toBe(422)
       const data = await response.json()
       expect(data).toHaveProperty('error', 'Invalid Steam ID. Must be a 17-digit number.')
+    })
+
+    it('enforces HTTP 422 for invalid IDs and HTTP 429 rate limit error when requests exceed limit', async () => {
+      const testIp = '192.168.1.100'
+      const headers = { 'x-forwarded-for': testIp }
+
+      // Make 15 requests (allowed limit)
+      for (let i = 0; i < 15; i++) {
+        const req = new Request('http://localhost:3000/api/library?steamid=invalid_id_123', { headers })
+        const res = await libraryApiHandler(req)
+        expect(res.status).toBe(422)
+      }
+
+      // 16th request should hit 429 Too Many Requests
+      const rateLimitedReq = new Request('http://localhost:3000/api/library?steamid=76561198274160349', { headers })
+      const rateLimitedRes = await libraryApiHandler(rateLimitedReq)
+      expect(rateLimitedRes.status).toBe(429)
+      const data = await rateLimitedRes.json()
+      expect(data).toHaveProperty('error', 'Too many requests. Please wait a minute before searching again.')
     })
   })
 

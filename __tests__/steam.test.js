@@ -4,7 +4,8 @@ import {
   formatPlaytime,
   getSteamCoverUrl,
   getSteamStoreUrl,
-  getPlatforms
+  getPlatforms,
+  getAchievementProgress
 } from '../lib/steam'
 
 describe('Steam Utils', () => {
@@ -38,5 +39,13 @@ describe('Steam Utils', () => {
     const winOnlyPlatforms = getPlatforms({ name: 'Unknown Windows Only Game App' })
     expect(winOnlyPlatforms).toContain('Win')
     expect(winOnlyPlatforms).toContain('Deck')
+  })
+
+  it('calculates achievement progress for played games', () => {
+    expect(getAchievementProgress({ appid: 10, playtime_forever: 0 })).toBeNull()
+    const pct = getAchievementProgress({ appid: 10, playtime_forever: 120 })
+    expect(typeof pct).toBe('number')
+    expect(pct).toBeGreaterThanOrEqual(20)
+    expect(pct).toBeLessThanOrEqual(100)
   })
 })

@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { getSavedSteamId, saveSteamId } from '@/lib/steam'
+import { useState, useEffect, useRef } from 'react'
+import { getSavedSteamId, saveSteamId, getRecentSteamIds } from '@/lib/steam'
 
 export default function SearchBox({
   steamid,
@@ -9,6 +9,11 @@ export default function SearchBox({
   onSearch,
   loading
 }) {
+  const [recentIds, setRecentIds] = useState([])
+  const [showMainDropdown, setShowMainDropdown] = useState(false)
+  const [openFriendDropdown, setOpenFriendDropdown] = useState(null)
+  const containerRef = useRef(null)
+
   const SAMPLES = [
     { label: 'Public Demo 1', id: '76561198274160349' },
     { label: 'Public Demo 2', id: '76561199057913061' },
@@ -20,12 +25,46 @@ export default function SearchBox({
     if (saved && !steamid) {
       setSteamid(saved)
     }
+    setRecentIds(getRecentSteamIds())
   }, [])
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setShowMainDropdown(false)
+        setOpenFriendDropdown(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const saveWithDisplayName = (idToSave) => {
+    if (!idToSave || !idToSave.trim()) return
+    const trimmed = idToSave.trim()
+    fetch(`/api/player?steamid=${trimmed}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const name = data?.personaname || trimmed
+        saveSteamId(trimmed, name)
+        setRecentIds(getRecentSteamIds())
+      })
+      .catch(() => {
+        saveSteamId(trimmed, trimmed)
+        setRecentIds(getRecentSteamIds())
+      })
+  }
 
   const handleSearchSubmit = () => {
     if (steamid) {
-      saveSteamId(steamid)
+      saveWithDisplayName(steamid)
     }
+    friendSteamIds.forEach(id => {
+      if (id.trim()) saveWithDisplayName(id.trim())
+    })
+    setShowMainDropdown(false)
+    setOpenFriendDropdown(null)
     onSearch()
   }
 
@@ -47,7 +86,7 @@ export default function SearchBox({
   const friendIdHelpTooltip = "Ask your friend to copy the 17-digit number from their Steam Profile URL address bar."
 
   return (
-    <div className="search-container">
+    <div className="search-container" ref={containerRef}>
       <div className="sso-banner">
         <a href="/api/auth/steam/login" className="btn-steam-sso">
           <svg className="steam-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -58,7 +97,7 @@ export default function SearchBox({
         <span className="or-divider">or enter Steam ID manually</span>
       </div>
 
-      {/* Main Steam ID Input Header with ? Tooltip */}
+      {/* Main Steam ID Input Header with ? Tooltip & Recent Dropdown */}
       <div className="search-box-group">
         <div className="search-box-header flex-between">
           <div className="filter-label-with-tooltip">
@@ -71,14 +110,51 @@ export default function SearchBox({
         </div>
 
         <div className="search-box">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="e.g. 76561198274160349..."
-            value={steamid}
-            onChange={e => setSteamid(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSearchSubmit()}
-          />
+          <div className="search-input-wrapper">
+            <input
+              type="text"
+              className="search-input"
+              placeholder="e.g. 76561198274160349..."
+              value={steamid}
+              onChange={e => setSteamid(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearchSubmit()}
+            />
+
+            {recentIds.length > 0 && (
+              <div className="recent-dropdown-container">
+                <button
+                  type="button"
+                  className="recent-dropdown-toggle"
+                  onClick={() => setShowMainDropdown(!showMainDropdown)}
+                  title="Recent Steam IDs"
+                >
+                  <span className="arrow-down">▼</span>
+                </button>
+
+                {showMainDropdown && (
+                  <div className="recent-dropdown-menu">
+                    <div className="recent-dropdown-header">Recent Steam IDs</div>
+                    {recentIds.map(item => (
+                      <button
+                        key={item.steamid}
+                        type="button"
+                        className="recent-dropdown-item"
+                        onClick={() => {
+                          setSteamid(item.steamid)
+                          saveWithDisplayName(item.steamid)
+                          setShowMainDropdown(false)
+                        }}
+                      >
+                        <span className="recent-name-text">{item.personaname !== item.steamid ? item.personaname : `ID: ...${item.steamid.slice(-6)}`}</span>
+                        <span className="recent-id-subtext">{item.steamid}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={handleSearchSubmit}
@@ -98,41 +174,91 @@ export default function SearchBox({
       </div>
 
       {/* Multi-Friend Steam ID Inputs */}
-      {friendSteamIds.map((friendId, index) => (
-        <div key={index} className="search-box-group">
-          <div className="search-box-header flex-between">
-            <div className="filter-label-with-tooltip">
-              <span className="search-label-text">Friend #{index + 1} Steam ID</span>
-              <span className="tooltip-target info-circle-icon">
-                ?
-                <span className="tooltip-bubble">{friendIdHelpTooltip}</span>
-              </span>
-            </div>
-          </div>
+      {friendSteamIds.map((friendId, index) => {
+        const trimmed = friendId.trim()
+        const isDuplicatePrimary = Boolean(trimmed && trimmed === steamid.trim())
+        const isDuplicateOther = Boolean(trimmed && friendSteamIds.slice(0, index).some(id => id.trim() === trimmed))
+        const isDuplicate = isDuplicatePrimary || isDuplicateOther
 
-          <div className="search-box">
-            <input
-              type="text"
-              className="search-input"
-              placeholder={`Friend #${index + 1} 17-digit Steam ID...`}
-              value={friendId}
-              onChange={e => handleUpdateFriend(index, e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSearchSubmit()}
-            />
-            <button
-              type="button"
-              className="btn-remove-friend"
-              onClick={() => handleRemoveFriend(index)}
-            >
-              <svg className="remove-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-              Remove
-            </button>
+        return (
+          <div key={index} className="search-box-group">
+            <div className="search-box-header flex-between">
+              <div className="filter-label-with-tooltip">
+                <span className="search-label-text">Friend #{index + 1} Steam ID</span>
+                <span className="tooltip-target info-circle-icon">
+                  ?
+                  <span className="tooltip-bubble">{friendIdHelpTooltip}</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="search-box">
+              <div className="search-input-wrapper">
+                <input
+                  type="text"
+                  className={`search-input ${isDuplicate ? 'input-warning' : ''}`}
+                  placeholder={`Friend #${index + 1} 17-digit Steam ID...`}
+                  value={friendId}
+                  onChange={e => handleUpdateFriend(index, e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSearchSubmit()}
+                />
+
+                {recentIds.length > 0 && (
+                  <div className="recent-dropdown-container">
+                    <button
+                      type="button"
+                      className="recent-dropdown-toggle"
+                      onClick={() => setOpenFriendDropdown(openFriendDropdown === index ? null : index)}
+                      title="Recent Steam IDs"
+                    >
+                      <span className="arrow-down">▼</span>
+                    </button>
+
+                    {openFriendDropdown === index && (
+                      <div className="recent-dropdown-menu">
+                        <div className="recent-dropdown-header">Recent Steam IDs</div>
+                        {recentIds.map(item => (
+                          <button
+                            key={item.steamid}
+                            type="button"
+                            className="recent-dropdown-item"
+                            onClick={() => {
+                              handleUpdateFriend(index, item.steamid)
+                              saveWithDisplayName(item.steamid)
+                              setOpenFriendDropdown(null)
+                            }}
+                          >
+                            <span className="recent-name-text">{item.personaname !== item.steamid ? item.personaname : `ID: ...${item.steamid.slice(-6)}`}</span>
+                            <span className="recent-id-subtext">{item.steamid}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="btn-remove-friend"
+                onClick={() => handleRemoveFriend(index)}
+              >
+                <svg className="remove-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+                Remove
+              </button>
+            </div>
+
+            {isDuplicate && (
+              <p className="duplicate-warning-text">
+                This Steam ID matches {isDuplicatePrimary ? 'your primary Steam ID' : 'another friend'} and will be skipped in comparison.
+              </p>
+            )}
           </div>
-        </div>
-      ))}
+        )
+      })}
 
       <button
         type="button"
@@ -157,7 +283,7 @@ export default function SearchBox({
             className="sample-btn"
             onClick={() => {
               setSteamid(sample.id)
-              saveSteamId(sample.id)
+              saveWithDisplayName(sample.id)
             }}
           >
             {sample.label}

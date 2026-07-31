@@ -61,3 +61,32 @@ export function HourglassIcon() {
     </svg>
   )
 }
+
+export function UpdateIcon() {
+  return (
+    <svg className="badge-inline-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 12a9 9 0 11-6.22-8.56" />
+      <polyline points="21 3 21 9 15 9" />
+    </svg>
+  )
+}
+
+export function ThumbsUpIcon() {
+  return (
+    <svg className="badge-inline-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3" />
+      <path d="M7 11V4a2 2 0 012-2h.5a2 2 0 012 2v3h4.28a2 2 0 011.98 2.28l-1.12 7A2 2 0 0114.66 18H7" />
+    </svg>
+  )
+}
+
+export function UsersIcon() {
+  return (
+    <svg className="badge-inline-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="9" cy="7" r="4" />
+      <path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2" />
+      <circle cx="17" cy="11" r="2.5" />
+      <path d="M21 21v-1.5a3 3 0 00-2-2.83" />
+    </svg>
+  )
+}

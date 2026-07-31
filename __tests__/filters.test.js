@@ -41,9 +41,10 @@ describe('Filter Utils', () => {
     expect(filtered.some(g => g.appid === 367520)).toBe(true)
   })
 
-  it('filters out excluded keywords like horror and VR', () => {
-    const filtered = filterGames(mockGames, 0, 12, null, ['no-horror', 'no-vr'])
+  it('filters out excluded keywords like horror, VR, and multiplayer', () => {
+    const filtered = filterGames(mockGames, 0, 12, null, ['no-horror', 'no-vr', 'no-multiplayer'])
     expect(filtered.some(g => g.appid === 739630)).toBe(false)
+    expect(filtered.some(g => g.appid === 730)).toBe(false)
   })
 
   describe('Multi-Player Mutual Games Comparison', () => {

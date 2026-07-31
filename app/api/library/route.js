@@ -1,6 +1,35 @@
 import { isValidSteamId } from '@/lib/steam'
 
+const rateLimitMap = new Map()
+
+export function isRateLimited(ip, limit = 15, windowMs = 60000) {
+  const now = Date.now()
+  const userRequests = rateLimitMap.get(ip) || []
+  const validRequests = userRequests.filter(timestamp => now - timestamp < windowMs)
+
+  if (validRequests.length >= limit) {
+    return true
+  }
+
+  validRequests.push(now)
+  rateLimitMap.set(ip, validRequests)
+  return false
+}
+
+export function clearRateLimitMap() {
+  rateLimitMap.clear()
+}
+
 export async function GET(request) {
+  // Rate Limiter Check (15 requests per minute per IP) executed FIRST
+  const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1'
+  if (isRateLimited(clientIp, 15, 60000)) {
+    return Response.json(
+      { error: 'Too many requests. Please wait a minute before searching again.' },
+      { status: 429, headers: { 'Retry-After': '60' } }
+    )
+  }
+
   const { searchParams } = new URL(request.url)
   const steamid = searchParams.get('steamid')?.trim()
 
