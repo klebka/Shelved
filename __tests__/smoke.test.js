@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { GET as libraryApiHandler, clearRateLimitMap } from '../app/api/library/route.js'
-import { GET as visitorsApiHandler } from '../app/api/visitors/route.js'
+import { GET as visitorsApiHandler, parseVercelAnalyticsCount } from '../app/api/visitors/route.js'
 import manifest from '../app/manifest.js'
 import { isValidSteamId } from '../lib/steam.js'
 import { filterGames, pickRandomGame } from '../lib/filters.js'
@@ -38,6 +38,14 @@ describe('Smoke Tests - Core Application Integrity', () => {
       const resReadOnly = await visitorsApiHandler(reqReadOnly)
       const dataReadOnly = await resReadOnly.json()
       expect(dataReadOnly.count).toBe(data2.count)
+    })
+
+    it('correctly parses Vercel Analytics REST API response formats', () => {
+      expect(parseVercelAnalyticsCount({ pageviews: { value: 1420 } })).toBe(1420)
+      expect(parseVercelAnalyticsCount({ pageviews: [{ value: 500 }, { value: 300 }] })).toBe(800)
+      expect(parseVercelAnalyticsCount({ visitors: { value: 950 } })).toBe(950)
+      expect(parseVercelAnalyticsCount({ total: 2000 })).toBe(2000)
+      expect(parseVercelAnalyticsCount(null)).toBeNull()
     })
   })
 
