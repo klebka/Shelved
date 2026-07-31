@@ -66,7 +66,7 @@ export async function GET(request) {
   }
 
   const token = process.env.VERCEL_AUTH_TOKEN
-  const projectId = process.env.VERCEL_PROJECT_ID || process.env.VERCEL_GIT_REPO_SLUG
+  const projectId = process.env.VERCEL_PROJECT_ID || process.env.VERCEL_GIT_REPO_SLUG || 'shelvedgames'
   const teamId = process.env.VERCEL_TEAM_ID
 
   // If Vercel REST API Token is configured, query Vercel Analytics REST API
