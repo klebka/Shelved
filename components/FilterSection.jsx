@@ -6,15 +6,13 @@ export default function FilterSection({
   maxHours = 12,
   mood,
   exclusions = [],
-  unplayedWeight = 30,
   onMinHoursChange,
   onMaxHoursChange,
   onMoodToggle,
   onExclusionToggle,
-  onWeightChange,
   onResetFilters
 }) {
-  const hasActiveFilters = minHours > 0 || maxHours < 12 || mood || exclusions.length > 0 || unplayedWeight !== 30
+  const hasActiveFilters = minHours > 0 || maxHours < 12 || mood || exclusions.length > 0
 
   const getMoodCount = (mFilter) => {
     if (!games) return null
@@ -30,7 +28,6 @@ export default function FilterSection({
   const timeTooltipText = "Filter games by expected session length or remaining completion duration between your selected min and max hours."
   const moodTooltipText = "Categorizes games using official Steam Store tags, genre metadata, and gameplay heuristics so 100% of your library matches Chill, Action, Story, Quick, or Co-Op moods."
   const exclusionTooltipText = "Filters out unwanted games matching selected exclusion tags (such as Horror/Zombie or VR-Only titles) from candidate picks."
-  const weightTooltipText = "Adjusts the RNG picker probability bias: 0% gives equal odds to all games, while 100% heavily prioritizes unplayed backlog titles."
 
   return (
     <div className="filter-section">
@@ -149,46 +146,6 @@ export default function FilterSection({
               </button>
             )
           })}
-        </div>
-      </div>
-
-      {/* Backlog Weight Slider */}
-      <div className="filter-group">
-        <div className="flex-between">
-          <div className="filter-label-with-tooltip">
-            <p className="filter-label">Backlog Weight</p>
-            <span className="tooltip-target info-circle-icon">
-              ?
-              <span className="tooltip-bubble">{weightTooltipText}</span>
-            </span>
-          </div>
-          <span className="time-range-badge">{unplayedWeight}% Unplayed Bias</span>
-        </div>
-
-        <div className="dual-slider-wrapper">
-          <div className="dual-slider-track-bg" />
-          <div
-            className="dual-slider-track-active"
-            style={{
-              left: 0,
-              width: `${unplayedWeight}%`
-            }}
-          />
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            value={unplayedWeight}
-            onChange={e => onWeightChange(Number(e.target.value))}
-            className="custom-range-slider"
-          />
-        </div>
-
-        <div className="slider-labels">
-          <span>Equal RNG (0%)</span>
-          <span>50% Unplayed</span>
-          <span>100% Backlog</span>
         </div>
       </div>
     </div>

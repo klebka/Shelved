@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { formatPlaytime, getSteamCoverUrl, getSteamStoreUrl, getPlatforms } from '@/lib/steam'
+import { formatPlaytime, getSteamCoverUrl, getSteamStoreUrl, getPlatforms, getAchievementProgress } from '@/lib/steam'
 import { estimateCompletionTime } from '@/lib/filters'
-import { PlatformIcon, ClockIcon, HourglassIcon } from '@/components/PlatformIcons'
+import { PlatformIcon, ClockIcon, HourglassIcon, TrophyIcon } from '@/components/PlatformIcons'
 
 export default function LibraryGrid({ games }) {
   const [searchTerm, setSearchTerm] = useState('')
@@ -24,7 +24,7 @@ export default function LibraryGrid({ games }) {
     return 0
   })
 
-  const tooltipText = "Estimated playthrough duration benchmarked from HowLongToBeat (HLTB) crowdsourced averages, your logged Steam playtime, and achievement completion %."
+  const durationTooltipText = "Estimated playthrough duration benchmarked from HowLongToBeat (HLTB) crowdsourced averages and your logged Steam playtime."
 
   return (
     <div className="library-grid-container card-enter">
@@ -54,6 +54,7 @@ export default function LibraryGrid({ games }) {
         {sortedGames.map(game => {
           const platforms = getPlatforms(game)
           const durationEst = estimateCompletionTime(game)
+          const achievementPct = getAchievementProgress(game)
 
           return (
             <div key={game.appid} className="grid-card">
@@ -75,6 +76,12 @@ export default function LibraryGrid({ games }) {
                       <PlatformIcon type={p} />
                     </span>
                   ))}
+                  {achievementPct !== null && (
+                    <span className="platform-icon-pill achievement-pill" title={`Achievement Completion: ${achievementPct}%`}>
+                      <TrophyIcon />
+                      <span className="achievement-pill-text">{achievementPct}%</span>
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid-badge-col">
@@ -82,10 +89,11 @@ export default function LibraryGrid({ games }) {
                     <ClockIcon />
                     {formatPlaytime(game.playtime_forever)}
                   </span>
+
                   <span className="duration-badge tooltip-target">
                     <HourglassIcon />
                     {durationEst}
-                    <span className="tooltip-bubble">{tooltipText}</span>
+                    <span className="tooltip-bubble">{durationTooltipText}</span>
                   </span>
                 </div>
 

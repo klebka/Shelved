@@ -1,19 +1,26 @@
 import { useState, useEffect } from 'react'
-import { formatPlaytime, getSteamCoverUrl, getSteamStoreUrl, getPlatforms } from '@/lib/steam'
+import { formatPlaytime, getSteamCoverUrl, getSteamStoreUrl, getPlatforms, getAchievementProgress } from '@/lib/steam'
 import { estimateCompletionTime } from '@/lib/filters'
 import { playSpinTick, playWinChime } from '@/lib/sound'
-import { PlatformIcon, ClockIcon, HourglassIcon } from '@/components/PlatformIcons'
+import { PlatformIcon, ClockIcon, HourglassIcon, TrophyIcon, UpdateIcon, ThumbsUpIcon, UsersIcon } from '@/components/PlatformIcons'
 
 export default function GameCard({
   suggestion,
   picking,
   onPickAgain,
   onSkip,
+  onPin,
+  isPinned = false,
   skippedCount = 0,
   candidateGames = [],
-  soundMuted = false
+  soundMuted = false,
+  steamid = ''
 }) {
   const [spinTitle, setSpinTitle] = useState('')
+  const [liveAchievementPct, setLiveAchievementPct] = useState(null)
+  const [lastUpdateDate, setLastUpdateDate] = useState(null)
+  const [reviewData, setReviewData] = useState(null)
+  const [playerCount, setPlayerCount] = useState(null)
 
   useEffect(() => {
     if (!picking || candidateGames.length === 0) return
@@ -33,12 +40,115 @@ export default function GameCard({
     }
   }, [picking, suggestion, soundMuted])
 
+  // Live Steam Achievement Fetching
+  useEffect(() => {
+    if (!suggestion || !steamid || suggestion.playtime_forever === 0) {
+      setLiveAchievementPct(null)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/achievements?steamid=${steamid}&appid=${suggestion.appid}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!cancelled) {
+          if (data && typeof data.percentage === 'number') {
+            setLiveAchievementPct(data.percentage)
+          } else {
+            setLiveAchievementPct(getAchievementProgress(suggestion))
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLiveAchievementPct(getAchievementProgress(suggestion))
+        }
+      })
+    return () => { cancelled = true }
+  }, [suggestion?.appid, steamid])
+
+  // Live Game Patch Update News Fetching
+  useEffect(() => {
+    if (!suggestion) {
+      setLastUpdateDate(null)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/news?appid=${suggestion.appid}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!cancelled && data && data.lastUpdate) {
+          setLastUpdateDate(data.lastUpdate)
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [suggestion?.appid])
+
+  // Live Steam Review Score Fetching
+  useEffect(() => {
+    if (!suggestion) {
+      setReviewData(null)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/reviews?appid=${suggestion.appid}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!cancelled && data && data.score !== null) {
+          setReviewData(data)
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [suggestion?.appid])
+
+  // Live Current Player Count Fetching
+  useEffect(() => {
+    if (!suggestion) {
+      setPlayerCount(null)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/players?appid=${suggestion.appid}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!cancelled && data && data.count !== null) {
+          setPlayerCount(data.count)
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [suggestion?.appid])
+
   if (!suggestion) return null
 
   const storeUrl = getSteamStoreUrl(suggestion.appid)
   const coverUrl = getSteamCoverUrl(suggestion.appid)
   const durationEst = estimateCompletionTime(suggestion)
   const platforms = getPlatforms(suggestion)
+  const achievementPct = liveAchievementPct !== null ? liveAchievementPct : getAchievementProgress(suggestion)
+
+  const formatLastUpdate = (timestamp) => {
+    if (!timestamp || timestamp === 0) return null
+    const daysAgo = Math.floor((Date.now() / 1000 - timestamp) / 86400)
+    if (daysAgo <= 0) return 'Updated today'
+    if (daysAgo === 1) return 'Updated yesterday'
+    if (daysAgo < 30) return `Updated ${daysAgo}d ago`
+    if (daysAgo < 365) return `Updated ${Math.floor(daysAgo / 30)}mo ago`
+    return `Updated ${Math.floor(daysAgo / 365)}y ago`
+  }
+
+  const formatPlayerCount = (count) => {
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`
+    return count.toLocaleString()
+  }
+
+  const getReviewColor = (score) => {
+    if (score >= 80) return 'review-positive'
+    if (score >= 40) return 'review-mixed'
+    return 'review-negative'
+  }
 
   const durationTooltipText = "Estimated playthrough duration benchmarked from HowLongToBeat (HLTB) crowdsourced averages and your logged Steam playtime."
   const skipTooltipText = "Temporarily skips this game for the rest of your current pick session. (Keyboard shortcut: S)"
@@ -102,7 +212,39 @@ export default function GameCard({
                 {durationEst}
                 <span className="tooltip-bubble">{durationTooltipText}</span>
               </span>
+
+              {achievementPct !== null && (
+                <span className="achievement-badge" title={`Achievement completion: ${achievementPct}%`}>
+                  <TrophyIcon />
+                  {achievementPct}%
+                </span>
+              )}
+
+              {lastUpdateDate && (
+                <span className="last-played-badge" title="Latest game patch announcement from Steam News">
+                  <UpdateIcon />
+                  {formatLastUpdate(lastUpdateDate)}
+                </span>
+              )}
             </div>
+
+            {(reviewData || playerCount !== null) && (
+              <div className="card-badge-row card-badge-row-secondary">
+                {reviewData && (
+                  <span className={`review-badge ${getReviewColor(reviewData.score)}`} title={`${reviewData.description} — ${reviewData.score}% of ${reviewData.total.toLocaleString()} reviews are positive`}>
+                    <ThumbsUpIcon />
+                    {reviewData.description} ({reviewData.score}%)
+                  </span>
+                )}
+
+                {playerCount !== null && playerCount > 0 && (
+                  <span className="players-badge" title={`${playerCount.toLocaleString()} players in-game right now`}>
+                    <UsersIcon />
+                    {formatPlayerCount(playerCount)} playing
+                  </span>
+                )}
+              </div>
+            )}
 
             <div className="card-actions">
               <button type="button" onClick={onPickAgain} className="btn-again">
@@ -116,11 +258,22 @@ export default function GameCard({
                 Skip (S)
                 <span className="tooltip-bubble">{skipTooltipText}</span>
               </button>
+              <button
+                type="button"
+                onClick={() => onPin(suggestion)}
+                className={`btn-pin ${isPinned ? 'pinned' : ''}`}
+                title={isPinned ? 'Remove from watchlist' : 'Add to watchlist'}
+              >
+                <svg viewBox="0 0 24 24" fill={isPinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+                </svg>
+                {isPinned ? 'Saved' : 'Save'}
+              </button>
             </div>
 
             {skippedCount > 0 && (
-              <p className="skipped-note text-center">
-                Skipped {skippedCount} game{skippedCount > 1 ? 's' : ''} this session
+              <p className="skipped-note">
+                {skippedCount} game{skippedCount > 1 ? 's' : ''} skipped this session
               </p>
             )}
           </div>
