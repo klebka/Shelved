@@ -40,10 +40,10 @@ describe('Smoke Tests - Core Application Integrity', () => {
       expect(dataReadOnly.count).toBe(data2.count)
     })
 
-    it('correctly parses Vercel Analytics REST API response formats', () => {
+    it('correctly parses Vercel Analytics REST API response formats, prioritizing visitors', () => {
+      expect(parseVercelAnalyticsCount({ visitors: { value: 950 }, pageviews: { value: 1420 } })).toBe(950)
+      expect(parseVercelAnalyticsCount({ visitors: [{ value: 500 }, { value: 450 }] })).toBe(950)
       expect(parseVercelAnalyticsCount({ pageviews: { value: 1420 } })).toBe(1420)
-      expect(parseVercelAnalyticsCount({ pageviews: [{ value: 500 }, { value: 300 }] })).toBe(800)
-      expect(parseVercelAnalyticsCount({ visitors: { value: 950 } })).toBe(950)
       expect(parseVercelAnalyticsCount({ total: 2000 })).toBe(2000)
       expect(parseVercelAnalyticsCount(null)).toBeNull()
     })

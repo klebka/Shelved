@@ -5,18 +5,18 @@ let localVisits = 0
 export function parseVercelAnalyticsCount(data) {
   if (!data) return null
 
-  // Check direct pageviews number or object value
-  if (typeof data.pageviews === 'number') return data.pageviews
-  if (typeof data.pageviews?.value === 'number') return data.pageviews.value
-  if (Array.isArray(data.pageviews) && data.pageviews.length > 0) {
-    return data.pageviews.reduce((acc, item) => acc + (item.value || item.count || 0), 0)
-  }
-
-  // Check visitors number or object value
+  // Prioritize UNIQUE VISITORS for total visits
   if (typeof data.visitors === 'number') return data.visitors
   if (typeof data.visitors?.value === 'number') return data.visitors.value
   if (Array.isArray(data.visitors) && data.visitors.length > 0) {
     return data.visitors.reduce((acc, item) => acc + (item.value || item.count || 0), 0)
+  }
+
+  // Fallback to pageviews if visitors metric is unavailable
+  if (typeof data.pageviews === 'number') return data.pageviews
+  if (typeof data.pageviews?.value === 'number') return data.pageviews.value
+  if (Array.isArray(data.pageviews) && data.pageviews.length > 0) {
+    return data.pageviews.reduce((acc, item) => acc + (item.value || item.count || 0), 0)
   }
 
   // Fallback to top-level value or total
